@@ -54,7 +54,8 @@ class _AlarmTimerSetState extends State<AlarmTimerSet> {
   void initState() {
     super.initState();
     tz.initializeTimeZones();
-    tz.setLocalLocation(tz.getLocation('America/Detroit')); // Adjust timezone as needed
+    tz.setLocalLocation(
+        tz.getLocation('America/Detroit')); // Adjust timezone as needed
     _initializeNotificationPlugin();
     loadAlarms();
     getConnectivity();
@@ -91,7 +92,8 @@ class _AlarmTimerSetState extends State<AlarmTimerSet> {
     final prefs = await SharedPreferences.getInstance();
     prefs.setStringList(
       'alarms',
-      alarms.map((alarm) => '${alarm.hour}|${alarm.minute}|${alarm.label}|${alarm.latitude}|${alarm.longitude}').toList(),
+      alarms.map((alarm) => '${alarm.hour}|${alarm.minute}|${alarm
+          .label}|${alarm.latitude}|${alarm.longitude}').toList(),
     );
   }
 
@@ -114,7 +116,8 @@ class _AlarmTimerSetState extends State<AlarmTimerSet> {
     int? minutes = int.tryParse(minuteText);
 
     if (hour != null && minutes != null) {
-      Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.low);
+      Position position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.low);
 
       setState(() {
         alarms.add(Alarm(
@@ -187,40 +190,49 @@ class _AlarmTimerSetState extends State<AlarmTimerSet> {
         hour: int.parse(hoursController.text),
         minute: int.parse(minutesController.text),
         label: labelController.text,
-        latitude: alarm.latitude,  // Keep original latitude
+        latitude: alarm.latitude,
+        // Keep original latitude
         longitude: alarm.longitude, // Keep original longitude
       );
     });
     await saveAlarms();
   }
 
-  void showDialogBox() => showCupertinoDialog<String>(
-    context: context,
-    builder: (BuildContext context) => CupertinoAlertDialog(
-      title: const Text('No Connection'),
-      content: const Text('Please check your internet connection'),
-      actions: <Widget>[
-        TextButton(
-          onPressed: () async {
-            Navigator.pop(context, 'Cancel');
-            setState(() => isAlertSet = false);
-            isDeviceConnected =
-            await InternetConnectionChecker().hasConnection;
-            if (!isDeviceConnected) {
-              showDialogBox();
-              setState(() => isAlertSet = true);
-            }
-          },
-          child: const Text('OK'),
-        ),
-      ],
-    ),
-  );
+  void showDialogBox() =>
+      showCupertinoDialog<String>(
+        context: context,
+        builder: (BuildContext context) =>
+            CupertinoAlertDialog(
+              title: const Text('No Connection'),
+              content: const Text('Please check your internet connection'),
+              actions: <Widget>[
+                TextButton(
+                  onPressed: () async {
+                    Navigator.pop(context, 'Cancel');
+                    setState(() => isAlertSet = false);
+                    isDeviceConnected =
+                    await InternetConnectionChecker().hasConnection;
+                    if (!isDeviceConnected) {
+                      showDialogBox();
+                      setState(() => isAlertSet = true);
+                    }
+                  },
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+      );
 
   @override
   Widget build(BuildContext context) {
-    var mheight=MediaQuery.of(context).size.height;
-    var mwidth=MediaQuery.of(context).size.width;
+    var mheight = MediaQuery
+        .of(context)
+        .size
+        .height;
+    var mwidth = MediaQuery
+        .of(context)
+        .size
+        .width;
     return Scaffold(
       appBar: AppBar(
         title: const Text("Alarm & Timer"),
@@ -238,7 +250,7 @@ class _AlarmTimerSetState extends State<AlarmTimerSet> {
                   color: Colors.blue),
             ),
             SizedBox(
-              height: mheight*0.05,
+              height: mheight * 0.05,
             ),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -246,28 +258,30 @@ class _AlarmTimerSetState extends State<AlarmTimerSet> {
                 const Text('Hours'),
                 const SizedBox(width: 10),
                 SizedBox(
-                  width:mwidth*0.1,
+                  width: mwidth * 0.1,
                   child: TextField(
                     controller: hoursController,
                     decoration: const InputDecoration(
                       border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(vertical: 5, horizontal: 10),
+                      contentPadding: EdgeInsets.symmetric(
+                          vertical: 5, horizontal: 10),
                     ),
                     keyboardType: TextInputType.number,
                   ),
                 ),
                 SizedBox(
-                  width: mwidth*0.02,
+                  width: mwidth * 0.02,
                 ),
                 const Text('Minutes'),
                 const SizedBox(width: 10),
                 SizedBox(
-                  width: mwidth*0.1,
+                  width: mwidth * 0.1,
                   child: TextField(
                     controller: minutesController,
                     decoration: const InputDecoration(
                       border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(vertical: 5, horizontal: 10),
+                      contentPadding: EdgeInsets.symmetric(
+                          vertical: 5, horizontal: 10),
                     ),
                     keyboardType: TextInputType.number,
                   ),
@@ -276,12 +290,13 @@ class _AlarmTimerSetState extends State<AlarmTimerSet> {
                 const Text('Label'),
                 const SizedBox(width: 10),
                 SizedBox(
-                  width: mwidth*0.15,
+                  width: mwidth * 0.15,
                   child: TextField(
                     controller: labelController,
                     decoration: const InputDecoration(
                       border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(vertical: 5, horizontal: 10),
+                      contentPadding: EdgeInsets.symmetric(
+                          vertical: 5, horizontal: 10),
                     ),
                     keyboardType: TextInputType.text,
                   ),
@@ -289,19 +304,19 @@ class _AlarmTimerSetState extends State<AlarmTimerSet> {
               ],
             ),
             SizedBox(
-              height: mheight*0.05,
+              height: mheight * 0.05,
             ),
             ElevatedButton(
-              onPressed: (){
+              onPressed: () {
                 createAlarm();
                 BlocProvider.of<WeatherBloc>(context).add(FetchWeather());
               },
 
               child: const Text('Create Alarm'),
             ),
-       SizedBox(
-         height: mheight*0.1,
-       ),
+            SizedBox(
+              height: mheight * 0.1,
+            ),
             Expanded(
               child: ListView.builder(
                 itemCount: alarms.length,
@@ -309,38 +324,44 @@ class _AlarmTimerSetState extends State<AlarmTimerSet> {
                   final alarm = alarms[index];
                   return ListTile(
                     title: Text(
-                      '${alarm.hour}:${alarm.minute.toString().padLeft(2, '0')} - ${alarm.label}',
+                      '${alarm.hour}:${alarm.minute.toString().padLeft(
+                          2, '0')} - ${alarm.label}',
                       style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
                           color: Colors.black),
                     ),
-                    subtitle:  Column(
+                    subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-    BlocBuilder<WeatherBloc, WeatherState>(
-    builder: (context, state) {
-      if (state is WeatherblocLoading) {
-        CircularProgressIndicator();
-      }
-      if (state is WeatherblocLoadeded) {
-        final country = BlocProvider
-            .of<WeatherBloc>(context)
-            .weaterModel
-            .weather!.first.main;
-        print("shaheen sha$country");
-      return Text("current weather is ${country.toString()}", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),);
-    }
-    if(state is WeatherblocError){
-      return Text("internal issue");
-    }else{
-      return Container();
-    }
-    }
-    ),
+                        BlocBuilder<WeatherBloc, WeatherState>(
+                            builder: (context, state) {
+                              if (state is WeatherblocLoading) {
+                                CircularProgressIndicator();
+                              }
+                              if (state is WeatherblocLoadeded) {
+                                final country = BlocProvider
+                                    .of<WeatherBloc>(context)
+                                    .weaterModel
+                                    .weather!
+                                    .first
+                                    .main;
+                                return Text(
+                                  "current weather is ${country.toString()}",
+                                  style: TextStyle(fontSize: 12,
+                                      fontWeight: FontWeight.bold),);
+                              }
+                              if (state is WeatherblocError) {
+                                return Text("internal issue");
+                              } else {
+                                return Container();
+                              }
+                            }
+                        ),
 
                         Text(
-                          'Latitude: ${alarm.latitude}, Longitude: ${alarm.longitude}',
+                          'Latitude: ${alarm.latitude}, Longitude: ${alarm
+                              .longitude}',
                           style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.normal,
