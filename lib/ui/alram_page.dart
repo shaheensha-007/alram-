@@ -1,231 +1,377 @@
+import 'dart:async';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_alarm_clock/flutter_alarm_clock.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:geolocator/geolocator.dart';
-import 'package:geolocator/geolocator.dart';
+import 'package:internet_connection_checker/internet_connection_checker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:timezone/browser.dart';
+import 'package:timezone/data/latest.dart' as tz;
+import 'package:timezone/timezone.dart' as tz;
 
-class AlaramTimerSet extends StatefulWidget {
-  const AlaramTimerSet({super.key});
+import '../Bloc/weather_bloc.dart';
+import '../modelclass/WeaterModel.dart';
+
+class AlarmTimerSet extends StatefulWidget {
+  const AlarmTimerSet({super.key});
 
   @override
-  State<AlaramTimerSet> createState() => _AlaramTimerSetState();
+  State<AlarmTimerSet> createState() => _AlarmTimerSetState();
+}
+
+class Alarm {
+  int hour;
+  int minute;
+  String label;
+  double latitude;
+  double longitude;
+
+  Alarm({
+    required this.hour,
+    required this.minute,
+    required this.label,
+    required this.latitude,
+    required this.longitude,
+  });
 }
 
 TextEditingController hoursController = TextEditingController();
 TextEditingController minutesController = TextEditingController();
+TextEditingController labelController = TextEditingController();
 
-class _AlaramTimerSetState extends State<AlaramTimerSet> with WidgetsBindingObserver {
-  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
-  String currentLocation = "Locating...";
+class _AlarmTimerSetState extends State<AlarmTimerSet> {
+  late StreamSubscription subscription;
+  var isDeviceConnected = false;
+  bool isAlertSet = false;
+  List<Alarm> alarms = [];
+  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+  FlutterLocalNotificationsPlugin();
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _initializeNotifications();
-    _loadSavedAlarm();
-    getCurrentLocation(); // Fetch location on startup
+    tz.initializeTimeZones();
+    tz.setLocalLocation(tz.getLocation('America/Detroit')); // Adjust timezone as needed
+    _initializeNotificationPlugin();
+    loadAlarms();
+    getConnectivity();
   }
 
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
+  Future<void> _initializeNotificationPlugin() async {
+    const AndroidInitializationSettings initializationSettingsAndroid =
+    AndroidInitializationSettings('@mipmap/ic_launcher');
 
-  @override
-  Widget build(BuildContext context) {
-    var mheight = MediaQuery.of(context).size.height;
-    var mwidth = MediaQuery.of(context).size.width;
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: Stack(
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(height: mheight * 0.1),
-              Center(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _buildTimeInputField(controller: hoursController, width: mwidth * 0.2, height: mheight * 0.05),
-                    SizedBox(width: mwidth * 0.05),
-                    _buildTimeInputField(controller: minutesController, width: mwidth * 0.2, height: mheight * 0.05),
-                  ],
-                ),
-              ),
-              SizedBox(height: mheight * 0.05),
-              Center(
-                child: Column(
-                  children: [
-                    TextButton(
-                      onPressed: () {
-                        String hourText = hoursController.text;
-                        String minuteText = minutesController.text;
-                        int? hour = int.tryParse(hourText);
-                        int? minutes = int.tryParse(minuteText);
-
-                        if (hour != null && minutes != null) {
-                          _saveAlarm(hour, minutes);
-                          _scheduleAlarm(DateTime.now().add(Duration(hours: hour, minutes: minutes)));
-                          FlutterAlarmClock.createAlarm(hour: hour, minutes: minutes);
-                        } else {
-                          print('Invalid time entered');
-                        }
-                      },
-                      child: Text("Create Alarm", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.green)),
-                    ),
-                    SizedBox(height: mheight * 0.03),
-                    ElevatedButton(
-                      onPressed: () {
-                        FlutterAlarmClock.showAlarms();
-                      },
-                      child: Text("Show Alarms", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
-                    ),
-                    SizedBox(height: mheight * 0.05),
-                    TextButton(
-                      onPressed: () {
-                        int? minutes = int.tryParse(minutesController.text);
-                        if (minutes != null) {
-                          FlutterAlarmClock.createTimer(length: minutes);
-                          _scheduleTimer(minutes);
-                        }
-                      },
-                      child: Text("Create Timer", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.green)),
-                    ),
-                    SizedBox(height: mheight * 0.03),
-                    ElevatedButton(
-                      onPressed: () {
-                        FlutterAlarmClock.showTimers();
-                      },
-                      child: Text("Show Timers", style: TextStyle(fontSize: 17)),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          )
-        ],
-      ),
+    const InitializationSettings initializationSettings = InitializationSettings(
+      android: initializationSettingsAndroid,
     );
-  }
 
-  Widget _buildTimeInputField({required TextEditingController controller, required double width, required double height}) {
-    return Container(
-      height: height,
-      width: width,
-      color: Colors.grey,
-      child: Padding(
-        padding: EdgeInsets.only(left: width * 0.02),
-        child: TextFormField(
-          controller: controller,
-          inputFormatters: [LengthLimitingTextInputFormatter(4)],
-          keyboardType: TextInputType.datetime,
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black),
-          decoration: InputDecoration(
-            enabledBorder: InputBorder.none,
-            focusedBorder: InputBorder.none,
-            errorBorder: InputBorder.none,
-            hintStyle: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _initializeNotifications() async {
-    const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const InitializationSettings initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
     await flutterLocalNotificationsPlugin.initialize(initializationSettings);
   }
 
-  Future<void> _saveAlarm(int hour, int minutes) async {
+  Future<void> loadAlarms() async {
     final prefs = await SharedPreferences.getInstance();
-    prefs.setInt('alarm_hour', hour);
-    prefs.setInt('alarm_minutes', minutes);
+    setState(() {
+      alarms = (prefs.getStringList('alarms') ?? []).map((alarmString) {
+        final parts = alarmString.split('|');
+        return Alarm(
+          hour: int.parse(parts[0]),
+          minute: int.parse(parts[1]),
+          label: parts[2],
+          latitude: double.parse(parts[3]),
+          longitude: double.parse(parts[4]),
+        );
+      }).toList();
+    });
   }
 
-  Future<void> _loadSavedAlarm() async {
+  Future<void> saveAlarms() async {
     final prefs = await SharedPreferences.getInstance();
-    int? hour = prefs.getInt('alarm_hour');
-    int? minutes = prefs.getInt('alarm_minutes');
+    prefs.setStringList(
+      'alarms',
+      alarms.map((alarm) => '${alarm.hour}|${alarm.minute}|${alarm.label}|${alarm.latitude}|${alarm.longitude}').toList(),
+    );
+  }
+
+  void getConnectivity() {
+    subscription = Connectivity().onConnectivityChanged.listen((result) async {
+      isDeviceConnected = await InternetConnectionChecker().hasConnection;
+      if (!isDeviceConnected && isAlertSet == false) {
+        showDialogBox();
+        setState(() => isAlertSet = true);
+      }
+    });
+  }
+
+  Future<void> createAlarm() async {
+    String hourText = hoursController.text;
+    String minuteText = minutesController.text;
+    String labelText = labelController.text;
+
+    int? hour = int.tryParse(hourText);
+    int? minutes = int.tryParse(minuteText);
+
     if (hour != null && minutes != null) {
-      _scheduleAlarm(DateTime.now().add(Duration(hours: hour, minutes: minutes)));
+      Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.low);
+
+      setState(() {
+        alarms.add(Alarm(
+          hour: hour,
+          minute: minutes,
+          label: labelText,
+          latitude: position.latitude,
+          longitude: position.longitude,
+        ));
+        FlutterAlarmClock.createAlarm(hour: hour, minutes: minutes);
+      });
+      await saveAlarms();
+
+      // Schedule the notification
+      _scheduleNotification(hour, minutes, labelText);
+    } else {
+      print('Invalid time entered');
     }
   }
 
-  Future<void> _scheduleAlarm(DateTime scheduledNotificationDateTime) async {
-    final TZDateTime tzDateTime = TZDateTime.from(scheduledNotificationDateTime,Location(name, transitionAt, transitionZone, zones));
+  Future<void> _scheduleNotification(int hour, int minute, String label) async {
+    final now = DateTime.now();
+    var scheduledTime = DateTime(now.year, now.month, now.day, hour, minute);
 
-    const AndroidNotificationDetails androidPlatformChannelSpecifics = AndroidNotificationDetails(
+    if (scheduledTime.isBefore(now)) {
+      scheduledTime = scheduledTime.add(Duration(days: 1));
+    }
+
+    const AndroidNotificationDetails androidPlatformChannelSpecifics =
+    AndroidNotificationDetails(
       'alarm_channel',
       'Alarm Notifications',
       channelDescription: 'Channel for Alarm notifications',
       importance: Importance.max,
       priority: Priority.high,
-      ticker: 'alarm',
+      showWhen: false,
     );
 
-    const NotificationDetails platformChannelSpecifics = NotificationDetails(android: androidPlatformChannelSpecifics);
+    const NotificationDetails platformChannelSpecifics =
+    NotificationDetails(android: androidPlatformChannelSpecifics);
 
     await flutterLocalNotificationsPlugin.zonedSchedule(
       0,
       'Alarm',
-      'Your alarm is ringing',
-      tzDateTime,
+      label,
+      tz.TZDateTime.from(scheduledTime, tz.local),
       platformChannelSpecifics,
       androidAllowWhileIdle: true,
-      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+      uiLocalNotificationDateInterpretation:
+      UILocalNotificationDateInterpretation.absoluteTime,
+      matchDateTimeComponents: DateTimeComponents.time,
     );
   }
 
-  Future<void> _scheduleTimer(int minutes) async {
-    final TZDateTime scheduledNotificationDateTime =TZDateTime.now(Location(name, transitionAt, transitionZone, zones)).add(Duration(minutes: minutes));
-
-    const AndroidNotificationDetails androidPlatformChannelSpecifics = AndroidNotificationDetails(
-      'timer_channel',
-      'Timer Notifications',
-      channelDescription: 'Channel for Timer notifications',
-      importance: Importance.max,
-      priority: Priority.high,
-      ticker: 'timer',
-    );
-
-    const NotificationDetails platformChannelSpecifics = NotificationDetails(android: androidPlatformChannelSpecifics);
-
-    await flutterLocalNotificationsPlugin.zonedSchedule(
-      1,
-      'Timer',
-      'Your timer is up!',
-      scheduledNotificationDateTime,
-      platformChannelSpecifics,
-      androidAllowWhileIdle: true,
-      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-    );
+  Future<void> deleteAlarm(int index) async {
+    setState(() {
+      alarms.removeAt(index);
+    });
+    await saveAlarms();
   }
-  Future<Position> getCurrentLocation()async{
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      return Future.error('Location disabled');
-    }
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        setState(() {
-          currentLocation="${permission.name.toString();} lon:${permission.}"
-        });
-        return Future.error('Location permission denied');
+
+  Future<void> editAlarm(int index) async {
+    setState(() {
+      Alarm alarm = alarms[index];
+      hoursController.text = alarm.hour.toString();
+      minutesController.text = alarm.minute.toString();
+      labelController.text = alarm.label;
+
+      alarms[index] = Alarm(
+        hour: int.parse(hoursController.text),
+        minute: int.parse(minutesController.text),
+        label: labelController.text,
+        latitude: alarm.latitude,  // Keep original latitude
+        longitude: alarm.longitude, // Keep original longitude
+      );
+    });
+    await saveAlarms();
+  }
+
+  void showDialogBox() => showCupertinoDialog<String>(
+    context: context,
+    builder: (BuildContext context) => CupertinoAlertDialog(
+      title: const Text('No Connection'),
+      content: const Text('Please check your internet connection'),
+      actions: <Widget>[
+        TextButton(
+          onPressed: () async {
+            Navigator.pop(context, 'Cancel');
+            setState(() => isAlertSet = false);
+            isDeviceConnected =
+            await InternetConnectionChecker().hasConnection;
+            if (!isDeviceConnected) {
+              showDialogBox();
+              setState(() => isAlertSet = true);
+            }
+          },
+          child: const Text('OK'),
+        ),
+      ],
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    var mheight=MediaQuery.of(context).size.height;
+    var mwidth=MediaQuery.of(context).size.width;
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Alarm & Timer"),
+        centerTitle: true,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(10.0),
+        child: Column(
+          children: <Widget>[
+            const Text(
+              'Set Alarm',
+              style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue),
+            ),
+            SizedBox(
+              height: mheight*0.05,
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text('Hours'),
+                const SizedBox(width: 10),
+                SizedBox(
+                  width:mwidth*0.1,
+                  child: TextField(
+                    controller: hoursController,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(vertical: 5, horizontal: 10),
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+                SizedBox(
+                  width: mwidth*0.02,
+                ),
+                const Text('Minutes'),
+                const SizedBox(width: 10),
+                SizedBox(
+                  width: mwidth*0.1,
+                  child: TextField(
+                    controller: minutesController,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(vertical: 5, horizontal: 10),
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                const Text('Label'),
+                const SizedBox(width: 10),
+                SizedBox(
+                  width: mwidth*0.15,
+                  child: TextField(
+                    controller: labelController,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(vertical: 5, horizontal: 10),
+                    ),
+                    keyboardType: TextInputType.text,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(
+              height: mheight*0.05,
+            ),
+            ElevatedButton(
+              onPressed: (){
+                createAlarm();
+                BlocProvider.of<WeatherBloc>(context).add(FetchWeather());
+              },
+
+              child: const Text('Create Alarm'),
+            ),
+       SizedBox(
+         height: mheight*0.1,
+       ),
+            Expanded(
+              child: ListView.builder(
+                itemCount: alarms.length,
+                itemBuilder: (context, index) {
+                  final alarm = alarms[index];
+                  return ListTile(
+                    title: Text(
+                      '${alarm.hour}:${alarm.minute.toString().padLeft(2, '0')} - ${alarm.label}',
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black),
+                    ),
+                    subtitle:  Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+    BlocBuilder<WeatherBloc, WeatherState>(
+    builder: (context, state) {
+      if (state is WeatherblocLoading) {
+        CircularProgressIndicator();
       }
+      if (state is WeatherblocLoadeded) {
+        final country = BlocProvider
+            .of<WeatherBloc>(context)
+            .weaterModel
+            .weather!.first.main;
+        print("shaheen sha$country");
+      return Text("current weather is ${country.toString()}", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),);
     }
-    if (permission == LocationPermission.deniedForever) {
-      return Future.error('Location permission denied');
+    if(state is WeatherblocError){
+      return Text("internal issue");
+    }else{
+      return Container();
     }
-    return await Geolocator.getCurrentPosition();
+    }
+    ),
+
+                        Text(
+                          'Latitude: ${alarm.latitude}, Longitude: ${alarm.longitude}',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.normal,
+                              color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.edit),
+                          onPressed: () {
+                            editAlarm(index);
+                          },
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.delete),
+                          onPressed: () {
+                            deleteAlarm(index);
+                          },
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

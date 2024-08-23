@@ -40,7 +40,11 @@ dependencies:
   shared_preferences: ^2.0.3
   timezone: ^0.9.4
   http: ^1.2.2
-  geolocator: ^13.0.1
+  internet_connection_checker: ^2.0.0
+  connectivity_plus: ^6.0.5
+  geolocator: ^12.0.0
+  flutter_bloc: ^8.1.6
+  fluttertoast: ^8.2.8
 
 
 dev_dependencies:
